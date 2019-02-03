@@ -52,6 +52,8 @@ int32_t qspi_dma_read(uint32_t address, uint8_t* buffer, uint32_t length);
 uint8_t sercom_index(Sercom* sercom);
 
 int32_t sercom_dma_write(Sercom* sercom, const uint8_t* buffer, uint32_t length);
+int32_t sercom_dma_write_nowait(Sercom* sercom, const uint8_t* buffer, uint32_t length);
+void sercom_dma_transfer_wait(Sercom* sercom);
 int32_t sercom_dma_read(Sercom* sercom, uint8_t* buffer, uint32_t length, uint8_t tx);
 int32_t sercom_dma_transfer(Sercom* sercom, const uint8_t* buffer_out, uint8_t* buffer_in, uint32_t length);
 

@@ -75,10 +75,25 @@ void init_shared_dma(void) {
 // If buffer_out is a real buffer, ignore tx.
 // DMAs buffer_out -> dest
 // DMAs src -> buffer_in
+void shared_dma_transfer_wait(void* peripheral, bool rx_active) {
+    Sercom* s = (Sercom*) peripheral;
+    // Wait for the SPI transfer to complete.
+    while (s->SPI.INTFLAG.bit.TXC == 0) {}
+
+    // This transmit will cause the RX buffer overflow but we're OK with that.
+    // So, read the garbage and clear the overflow flag.
+    if (!rx_active) {
+        while (s->SPI.INTFLAG.bit.RXC == 1) {
+            s->SPI.DATA.reg;
+        }
+        s->SPI.STATUS.bit.BUFOVF = 1;
+        s->SPI.INTFLAG.reg = SERCOM_SPI_INTFLAG_ERROR;
+    }
+}
 static int32_t shared_dma_transfer(void* peripheral,
                                    const uint8_t* buffer_out, volatile uint32_t* dest,
                                    volatile uint32_t* src, uint8_t* buffer_in,
-                                   uint32_t length, uint8_t tx) {
+                                   uint32_t length, uint8_t tx, bool wait_for_finish) {
     if (!dma_channel_free(SHARED_TX_CHANNEL) ||
         (buffer_in != NULL && !dma_channel_free(SHARED_RX_CHANNEL))) {
         return -1;
@@ -192,20 +207,8 @@ static int32_t shared_dma_transfer(void* peripheral,
         while ((dma_transfer_status(SHARED_TX_CHANNEL) & 0x3) == 0) {}
     }
 
-    if (sercom) {
-        Sercom* s = (Sercom*) peripheral;
-        // Wait for the SPI transfer to complete.
-        while (s->SPI.INTFLAG.bit.TXC == 0) {}
-
-        // This transmit will cause the RX buffer overflow but we're OK with that.
-        // So, read the garbage and clear the overflow flag.
-        if (!rx_active) {
-            while (s->SPI.INTFLAG.bit.RXC == 1) {
-                s->SPI.DATA.reg;
-            }
-            s->SPI.STATUS.bit.BUFOVF = 1;
-            s->SPI.INTFLAG.reg = SERCOM_SPI_INTFLAG_ERROR;
-        }
+    if (sercom && wait_for_finish) {
+        shared_dma_transfer_wait(peripheral, rx_active);
     }
 
     if ((!rx_active || dma_transfer_status(SHARED_RX_CHANNEL) == DMAC_CHINTFLAG_TCMPL) &&
@@ -218,24 +221,32 @@ static int32_t shared_dma_transfer(void* peripheral,
 
 int32_t sercom_dma_transfer(Sercom* sercom, const uint8_t* buffer_out, uint8_t* buffer_in,
                             uint32_t length) {
-    return shared_dma_transfer(sercom, buffer_out, &sercom->SPI.DATA.reg, &sercom->SPI.DATA.reg, buffer_in, length, 0);
+    return shared_dma_transfer(sercom, buffer_out, &sercom->SPI.DATA.reg, &sercom->SPI.DATA.reg, buffer_in, length, 0, true);
 }
 
 int32_t sercom_dma_write(Sercom* sercom, const uint8_t* buffer, uint32_t length) {
-    return shared_dma_transfer(sercom, buffer, &sercom->SPI.DATA.reg, NULL, NULL, length, 0);
+    return shared_dma_transfer(sercom, buffer, &sercom->SPI.DATA.reg, NULL, NULL, length, 0, true);
+}
+
+int32_t sercom_dma_write_nowait(Sercom* sercom, const uint8_t* buffer, uint32_t length) {
+    return shared_dma_transfer(sercom, buffer, &sercom->SPI.DATA.reg, NULL, NULL, length, 0, false);
+}
+
+void sercom_dma_transfer_wait(Sercom* sercom) {
+    shared_dma_transfer_wait(sercom, false);
 }
 
 int32_t sercom_dma_read(Sercom* sercom, uint8_t* buffer, uint32_t length, uint8_t tx) {
-    return shared_dma_transfer(sercom, NULL, &sercom->SPI.DATA.reg, &sercom->SPI.DATA.reg, buffer, length, tx);
+    return shared_dma_transfer(sercom, NULL, &sercom->SPI.DATA.reg, &sercom->SPI.DATA.reg, buffer, length, tx, true);
 }
 
 #ifdef SAMD51
 int32_t qspi_dma_write(uint32_t address, const uint8_t* buffer, uint32_t length) {
-    return shared_dma_transfer(QSPI, buffer, (uint32_t*) (QSPI_AHB + address), NULL, NULL, length, 0);
+    return shared_dma_transfer(QSPI, buffer, (uint32_t*) (QSPI_AHB + address), NULL, NULL, length, 0, true);
 }
 
 int32_t qspi_dma_read(uint32_t address, uint8_t* buffer, uint32_t length) {
-    return shared_dma_transfer(QSPI, NULL, NULL, (uint32_t*) (QSPI_AHB + address), buffer, length, 0);
+    return shared_dma_transfer(QSPI, NULL, NULL, (uint32_t*) (QSPI_AHB + address), buffer, length, 0, true);
 }
 #endif
 
