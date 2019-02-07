@@ -142,9 +142,11 @@ void TC3_Handler(void) {
 void TC4_Handler(void) {
     shared_timer_handler(true, 4 - TC_OFFSET);
 }
+#ifndef TC5_IN_USE
 void TC5_Handler(void) {
     shared_timer_handler(true, 5 - TC_OFFSET);
 }
+#endif
 #ifdef TC6
 void TC6_Handler(void) {
     shared_timer_handler(true, 6 - TC_OFFSET);

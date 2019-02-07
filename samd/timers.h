@@ -59,7 +59,9 @@ void TCC1_Handler(void);
 void TCC2_Handler(void);
 void TC3_Handler(void);
 void TC4_Handler(void);
+#ifndef TC5_IN_USE
 void TC5_Handler(void);
+#endif
 #ifdef TC6
 void TC6_Handler(void);
 #endif
